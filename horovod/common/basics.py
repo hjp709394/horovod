@@ -23,13 +23,17 @@ class MPI:
         ...
 
 from horovod.common.process_sets import ProcessSet, global_process_set, _init_process_sets
+from horovod.common.process_sets import _setup as _setup_process_sets
 from horovod.common import util as util
 
+print(f"[hvd DEBUG] custom HorovodBasics is imported")
 
 class HorovodBasics(object):
     """Wrapper class for the basic Horovod API."""
 
     def __init__(self, pkg_path, *args):
+        print(f"[hvd DEBUG] HorovodBasics.__init__ - pkg_path: {pkg_path}")
+
         full_path = util.get_extension_full_path(pkg_path, *args)
         self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
@@ -50,6 +54,7 @@ class HorovodBasics(object):
 
     def init(self, comm: Optional[Union[Sequence[int], MPI.Comm]] = None,
              process_sets: Optional[Sequence[ProcessSet]] = None):
+        print("[hvd DEBUG] HorovodBasics.init")
         """A function that initializes Horovod.
 
         Args:
@@ -128,13 +133,25 @@ class HorovodBasics(object):
             initialization_ok = self.MPI_LIB_CTYPES.horovod_init_multi_comm((MPI_Comm * num_comms)(*comm_objs),
                                                                             ctypes.c_int(num_comms),
                                                                             *process_set_args_via_ranks)
+
+        print(f"[hvd DEBUG] HorovodBasics.init - _setup_process_sets after horovod_init")
+        _setup_process_sets(self)
+        print(f"[hvd DEBUG] HorovodBaics self: {id(self)} / {self}")
+
         if not initialization_ok:
             raise ValueError(
                 "Horovod initialization failed. Please check log messages above for a more descriptive error.")
 
         try:
+            print(f"[hvd DEBUG] HorovodBasics.init - process_sets: {process_sets} - global_process_set: {global_process_set}")
+            process_set_ids_and_ranks_before = self._get_process_set_ids_and_ranks()
+            print(f"[hvd DEBUG] HorovodBasics.init - _init_process_sets - ids_and_ranks: {process_set_ids_and_ranks_before}")
             _init_process_sets(process_sets)
+            print(f"[hvd DEBUG] HorovodBasics.init - _init_process_sets done - global_process_set: {global_process_set}")
+            process_set_ids_and_ranks_after = self._get_process_set_ids_and_ranks()
+            print(f"[hvd DEBUG] HorovodBasics.init - _init_process_sets done - ids_and_ranks: {process_set_ids_and_ranks_after}")
         except ValueError as e:
+            print(f"[hvd DEBUG] HorovodBasics.init - _init_process_sets error: {e}")
             if (len(e.args) > 0 and isinstance(e.args[0], str) and
                 "Horovod has not been initialized properly" in e.args[0]):
                 # Horovod is already shutting down
@@ -448,13 +465,17 @@ class HorovodBasics(object):
         Note that this function does not lock the Horovod-internal ProcessSetTable. If the Horovod background thread
         shuts down while the Python thread is still executing this function, there can be spurious failures. """
         num = int(self.MPI_LIB_CTYPES.horovod_number_of_process_sets())
+        print(f"[hvd DEBUG] _get_process_set_ids_and_ranks - num: {num}")
         ids_array = (ctypes.c_int * num)()
         self.MPI_LIB_CTYPES.horovod_process_set_ids(ids_array)
+        print(f"[hvd DEBUG] _get_process_set_ids_and_ranks - ids_array: {ids_array}")
         ret = {}
         for ps_id in ids_array:
+            print(f"[hvd DEBUG] _get_process_set_ids_and_ranks - ps_id: {ps_id}")
             ps_size = int(self.MPI_LIB_CTYPES.horovod_process_set_size(ctypes.c_int(ps_id)))
 
             if ps_size == self.HOROVOD_PROCESS_SET_ERROR_INIT:
+                print(f"[hvd DEBUG] _get_process_set_ids_and_ranks ERROR horovod_process_set_size - ps_size: {ps_size} - ps_id: {ps_id}")
                 raise ValueError('Horovod has not been initialized properly; use hvd.init().')
             elif ps_size < 0:
                 raise RuntimeError("Process set table was modified outside of _get_process_set_ids_and_ranks()")
@@ -462,8 +483,10 @@ class HorovodBasics(object):
             ranks_array = (ctypes.c_int * ps_size)()
             res = int(self.MPI_LIB_CTYPES.horovod_process_set_ranks(ctypes.c_int(ps_id), ranks_array))
             if res == self.HOROVOD_PROCESS_SET_ERROR_INIT:
+                print(f"[hvd DEBUG] _get_process_set_ids_and_ranks ERROR horovod_process_set_ranks - res: {res} - ps_id: {ps_id}")
                 raise ValueError('Horovod has not been initialized properly; use hvd.init().')
             elif res < 0:
+                print(f"[hvd DEBUG] _get_process_set_ids_and_ranks ERROR horovod_process_set_ranks - res: {res} - ps_id: {ps_id}")
                 raise RuntimeError("Process set table was modified outside of _get_process_set_ids_and_ranks()")
             ret[ps_id] = list(ranks_array)
         return ret
@@ -489,4 +512,3 @@ class HorovodBasics(object):
         elif result == self.HOROVOD_PROCESS_SET_ERROR_UNKNOWN_SET:
             raise ValueError('MPI communicator does not correspond to any registered process set.')
         return result
-

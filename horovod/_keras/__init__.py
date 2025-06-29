@@ -33,6 +33,7 @@ def create_distributed_optimizer(keras, optimizer, name, device_dense, device_sp
                                  average_aggregated_gradients=False,
                                  groups=None, process_set=hvd.global_process_set,
                                  scale_local_gradients=True):
+    print(f"[hvd DEBUG] hvd._keras.create_distributed_optimizer - process_set: {process_set}")
     class _DistributedOptimizer(*optimizer.__class__.__bases__):
         _HAS_AGGREGATE_GRAD = True
 
@@ -101,6 +102,7 @@ def create_distributed_optimizer(keras, optimizer, name, device_dense, device_sp
                 self._local_vars.add(var)
 
         def compute_gradients(self, loss, var_list, tape=None):
+            print(f"[hvd DEBUG] hvd._keras.compute_gradients - loss: {loss} - var_list: {var_list} - tape: {tape}")
             return self._compute_gradients(loss, var_list, None, tape)
 
         def _compute_gradients(self, loss, var_list, grad_loss=None, tape=None):
@@ -112,6 +114,7 @@ def create_distributed_optimizer(keras, optimizer, name, device_dense, device_sp
             In DistributedOptimizer, get_gradients() is overriden to also
             allreduce the gradients before returning them.
             """
+            print(f"[hvd DEBUG] hvd._keras._compute_gradients - loss: {loss} - var_list: {var_list} - grad_loss: {grad_loss} - tape: {tape}")
             base_class = super(self.__class__, self)
             if _PRE_TF_2_4_0:
                 return base_class._compute_gradients(
@@ -145,21 +148,33 @@ def create_distributed_optimizer(keras, optimizer, name, device_dense, device_sp
             In DistributedOptimizer, get_gradients() is overriden to also
             allreduce the gradients before returning them.
             """
+            print(f"[hvd DEBUG] hvd._keras.get_gradients - loss: {loss} - params: {params}")
             gradients = super(self.__class__, self).get_gradients(loss, params)
             return self._allreduce(gradients, params)
 
         def _aggregate_gradients(self, grads_and_vars):
+            print(f"[hvd DEBUG] hvd._keras._aggregate_gradients - grads_and_vars: {grads_and_vars}")
+            import traceback
+            print(f"[hvd DEBUG] hvd._keras._aggregate_gradients - tracekstack: \n{traceback.format_stack()}\n\n")
+
             base_class = super(self.__class__, self)
             if _PRE_TF_2_4_0:
+                print(f"[hvd DEBUG] hvd._keras._aggregate_gradients - _PRE_TF_2_4_0")
                 grads, vars = list(zip(*grads_and_vars))
                 aggregated_grads = self._allreduce(grads, vars)
                 return aggregated_grads
             elif hasattr(base_class, '_aggregate_gradients'):
+                print(f"[hvd DEBUG] hvd._keras._aggregate_gradients - hasattr(base_class, '_aggregate_gradients') - base_class: {base_class}")
                 return base_class._aggregate_gradients(grads_and_vars)
             else:
+                print(f"[hvd DEBUG] hvd._keras._aggregate_gradients - else - base_class: {base_class}")
                 return base_class.aggregate_gradients(grads_and_vars)
 
         def _allreduce(self, grads, vars):
+            print(f"[hvd DEBUG] hvd._keras._allreduce - grads: {grads} - vars: {vars}")
+            import traceback
+            print(f"[hvd DEBUG] hvd._keras._allreduce - tracekstack: \n{traceback.format_stack()}\n\n")
+
             self._aggregated_gradients = True
 
             if self._agg_helper:
@@ -218,7 +233,12 @@ def create_distributed_optimizer(keras, optimizer, name, device_dense, device_sp
                 return __filtered_reduce_grads(grads, vars)
 
         def apply_gradients(self, *args, **kwargs):
+            print(f"[hvd DEBUG] hvd._keras.apply_gradients - args: {args} - kwargs: {kwargs}")
+            import traceback
+            print(f"[hvd DEBUG] hvd._keras.apply_gradients - tracekstack: \n{traceback.format_stack()}\n\n")
+
             if self._agg_helper:
+                print(f"[hvd DEBUG] hvd._keras.apply_gradients - self._agg_helper")
                 if isinstance(args[0], zip):
                     # If grad_and_vars are passed in as a zip object
                     # convert to a list. This is necessary for TF2.4+
@@ -235,6 +255,7 @@ def create_distributed_optimizer(keras, optimizer, name, device_dense, device_sp
                     **kwargs,
                 )
             else:
+                print(f"[hvd DEBUG] hvd._keras.apply_gradients - else")
                 results = super(self.__class__, self).apply_gradients(*args, **kwargs)
 
             if _PRE_TF_2_4_0 and not self._aggregated_gradients:

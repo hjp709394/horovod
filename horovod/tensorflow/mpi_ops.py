@@ -87,6 +87,7 @@ Max = _basics.Max
 Product = _basics.Product
 
 def init(*args, **kwargs):
+    print(f"[hvd DEBUG] mpi_ops.init")
     _basics.init(*args, **kwargs)
     # Call set up again to make sure the basics is in sync
     _setup_process_sets(_basics)
@@ -125,6 +126,10 @@ def _allreduce(tensor, name=None, op=Sum, prescale_factor=1.0, postscale_factor=
       A tensor of the same shape and type as `tensor`, summed across all
       processes.
     """
+    print(f"[hvd DEBUG] hvd.tf.mpi_ops._allreduce - name: {name} - tensor: {tensor} - op: {op} - prescale_factor: {prescale_factor} - postscale_factor: {postscale_factor} - ignore_name_scope: {ignore_name_scope} - process_set: {process_set}")
+    import traceback
+    print(f"[hvd DEBUG] hvd.tf.mpi_ops._allreduce - tracekstack: \n{traceback.format_stack()}\n\n")
+
     if name is None and not _executing_eagerly():
         name = 'HorovodAllreduce_%s' % _normalize_name(tensor.name)
     return MPI_LIB.horovod_allreduce(tensor, name=name, reduce_op=op,

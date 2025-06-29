@@ -689,6 +689,10 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
   LOG(INFO, horovod_global.global_controller->GetRank())
       << "Horovod initialized";
 
+  LOG(DEBUG) << "[hvd DEBUG] BackgroundThreadLoop - state.initialization_done: " << state.initialization_done
+      << " - horovod_global.initialization_done: " << horovod_global.initialization_done
+      << " - horovod_global.global_controller->GetSize(): " << horovod_global.global_controller->GetSize();
+
   // Iterate until shutdown.
   try {
     while (RunLoopOnce(state))
@@ -697,6 +701,7 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
     LOG(ERROR, horovod_global.global_controller->GetRank())
         << "Horovod background loop uncaught exception: " << ex.what();
   }
+  LOG(DEBUG) << "[hvd DEBUG] BackgroundThreadLoop - RunLoopOnce done";
 
 shutdown:
   // Finalize all contexts
@@ -890,6 +895,7 @@ bool InitializeHorovodOnce(
     }
 #endif
     // Reset initialization flag
+    LOG(DEBUG) << "[hvd DEBUG] reset initialization flag";
     horovod_global.initialization_done = false;
     horovod_global.background_thread =
         std::thread(BackgroundThreadLoop, std::ref(horovod_global));
@@ -1065,6 +1071,7 @@ void horovod_shutdown() {
 
     // Reset the initialization flag to allow restarting with horovod_init(...)
     horovod_global.initialize_flag.clear();
+    LOG(DEBUG) << "[hvd DEBUG] horovod_shutdown";
     horovod_global.shut_down = false;
     horovod_global.initialization_done = false;
   }
@@ -1130,9 +1137,11 @@ int horovod_cross_rank() {
 }
 
 int horovod_size() {
+  LOG(DEBUG) << "[hvd DEBUG] horovod_size - horovod_global.initialization_done: " << &horovod_global << " - " << horovod_global.initialization_done;
   if (!horovod_global.initialization_done) {
     return -1;
   }
+  LOG(DEBUG) << "[hvd DEBUG] horovod_size - global_controller->GetSize()";
   return horovod_global.global_controller->GetSize();
 }
 
@@ -1346,9 +1355,11 @@ int horovod_process_set_rank(int process_set_id) {
 
 int horovod_process_set_size(int process_set_id) {
   if (process_set_id == 0) {
+    LOG(DEBUG) << "[hvd DEBUG] horovod_process_set_size - process_set_id == 0";
     return horovod_size();
   }
   if (!horovod_global.initialization_done) {
+    LOG(DEBUG) << "[hvd DEBUG] horovod_process_set_size - !horovod_global.initialization_done";
     return HOROVOD_PROCESS_SET_ERROR_INIT;
   }
   std::lock_guard<std::recursive_mutex> table_lock(
@@ -1387,11 +1398,13 @@ void horovod_process_set_ids(int* ids_prealloc) {
 
 int horovod_process_set_ranks(int id, int* ranks_prealloc) {
   if (!horovod_global.initialization_done) {
+    LOG(DEBUG) << "[hvd DEBUG] horovod_process_set_ranks - !horovod_global.initialization_done";
     return HOROVOD_PROCESS_SET_ERROR_INIT;
   }
   try {
     const auto& process_set = horovod_global.process_set_table.Get(id);
     if (!process_set.initialization_done) {
+      LOG(DEBUG) << "[hvd DEBUG] horovod_process_set_ranks - !process_set.initialization_done";
       return HOROVOD_PROCESS_SET_ERROR_INIT;
     }
     std::copy(process_set.registered_global_ranks.begin(),

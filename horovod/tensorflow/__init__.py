@@ -97,6 +97,8 @@ def allreduce(tensor, average=None, device_dense='', device_sparse='',
         A tensor of the same shape and type as `tensor`, summed across all
         processes.
     """
+    print(f"[hvd DEBUG] hvd.tf.allreduce - process_set: {process_set}")
+
     op = handle_average_backwards_compatibility(op, average)
 
     if isinstance(tensor, tf.IndexedSlices):
@@ -564,6 +566,7 @@ def _make_cached_allreduce_grads_fn(name, device_dense, device_sparse,
         postscale_factor = 1.0
 
     def allreduce_grads(grads, vars=None, use_generic_names=False):
+        print(f"[hvd DEBUG] hvd.tf._make_cached_allreduce_grads_fn.allreduce_grads: grads: {grads} - vars: {vars} - use_generic_names: {use_generic_names}")
         with tf.name_scope(name + "_Allreduce"):
             if sparse_as_dense:
                 grads = [tf.convert_to_tensor(grad)
@@ -961,6 +964,7 @@ def DistributedOptimizer(optimizer, name=None, use_locking=False, device_dense='
         to this process set. Defaults to the global process set.
       scale_local_gradients: Whether to scale the gradients of local variables. Default is set to True.
     """
+    print("[hvd DEBUG] hvd.tf.DistributedOptimizer")
     if gradient_predivide_factor != 1.0:
         if rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')

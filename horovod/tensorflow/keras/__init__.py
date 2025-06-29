@@ -107,6 +107,8 @@ def DistributedOptimizer(optimizer, name=None,
         scale_local_gradients: Whether to scale the gradients of local variables. Default is set to True.
 
     """
+    print(f"[hvd DEBUG] hvd.tf.keras.DistributedOptimizer - global_process_set: {global_process_set}")
+
     if gradient_predivide_factor != 1.0 and rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')
 

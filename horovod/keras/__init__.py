@@ -82,6 +82,7 @@ def DistributedOptimizer(optimizer, name=None,
                 not appear in any list will form a group itself.
                 Defaults as None, which is no explicit groups.
     """
+    print("[hvd DEBUG] hvd.keras.DistributedOptimizer")
     if gradient_predivide_factor != 1.0 and rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')
 

@@ -135,6 +135,7 @@ bool ProcessSet::Initialize(const GlooContext& global_gloo_context) {
   }
   gloo_context.InitializeForProcessSet(global_gloo_context,
                                        registered_global_ranks);
+  LOG(DEBUG) << "[hvd DEBUG] ProcessSet::Initialize - gloo_context.InitializeForProcessSet done";
   if (gloo_context.ctx != nullptr) {
     controller->Initialize();
   }
@@ -142,6 +143,7 @@ bool ProcessSet::Initialize(const GlooContext& global_gloo_context) {
     registered_global_ranks.resize(size);
     std::iota(registered_global_ranks.begin(), registered_global_ranks.end(), 0);
   }
+  LOG(DEBUG) << "[hvd DEBUG] ProcessSet::Initialize - initialization_done done";
   initialization_done = true;
   return true;
 }
