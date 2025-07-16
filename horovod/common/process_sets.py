@@ -90,6 +90,9 @@ global_process_set.process_set_id = 0
 
 
 def _setup(basics):
+    import traceback
+    print(f"[hvd DEBUG] process_sets / _setup - basics: {id(basics)} / {basics} - tracekstack: \n{traceback.format_stack()}\n\n")
+
     # type: (Optional[HorovodBasics]) -> None
     """" Horovod internal, to be called after the Horovod C++ module has been loaded. """
     global _basics

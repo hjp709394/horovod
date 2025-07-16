@@ -54,50 +54,154 @@ except Exception as e:
 else:
     check_installed_version('tensorflow', tf.__version__)
 
-_basics = _HorovodBasics(__file__, 'mpi_lib')
+# _basics = _HorovodBasics(__file__, 'mpi_lib')
+_basics = None
+
+# # import basic methods
+# shutdown = _basics.shutdown
+# is_initialized = _basics.is_initialized
+# start_timeline = _basics.start_timeline
+# stop_timeline = _basics.stop_timeline
+# size = _basics.size
+# local_size = _basics.local_size
+# cross_size = _basics.cross_size
+# rank = _basics.rank
+# local_rank = _basics.local_rank
+# cross_rank = _basics.cross_rank
+# mpi_threads_supported = _basics.mpi_threads_supported
+# mpi_enabled = _basics.mpi_enabled
+# mpi_built = _basics.mpi_built
+# gloo_enabled = _basics.gloo_enabled
+# gloo_built = _basics.gloo_built
+# nccl_built = _basics.nccl_built
+# ddl_built = _basics.ddl_built
+# ccl_built = _basics.ccl_built
+# cuda_built = _basics.cuda_built
+# rocm_built = _basics.rocm_built
 
 # import basic methods
-shutdown = _basics.shutdown
-is_initialized = _basics.is_initialized
-start_timeline = _basics.start_timeline
-stop_timeline = _basics.stop_timeline
-size = _basics.size
-local_size = _basics.local_size
-cross_size = _basics.cross_size
-rank = _basics.rank
-local_rank = _basics.local_rank
-cross_rank = _basics.cross_rank
-mpi_threads_supported = _basics.mpi_threads_supported
-mpi_enabled = _basics.mpi_enabled
-mpi_built = _basics.mpi_built
-gloo_enabled = _basics.gloo_enabled
-gloo_built = _basics.gloo_built
-nccl_built = _basics.nccl_built
-ddl_built = _basics.ddl_built
-ccl_built = _basics.ccl_built
-cuda_built = _basics.cuda_built
-rocm_built = _basics.rocm_built
+shutdown = None
+is_initialized = None
+start_timeline = None
+stop_timeline = None
+size = None
+local_size = None
+cross_size = None
+rank = None
+local_rank = None
+cross_rank = None
+mpi_threads_supported = None
+mpi_enabled = None
+mpi_built = None
+gloo_enabled = None
+gloo_built = None
+nccl_built = None
+ddl_built = None
+ccl_built = None
+cuda_built = None
+rocm_built = None
+
+# # import reduction op values
+# Average = _basics.Average
+# Sum = _basics.Sum
+# Adasum = _basics.Adasum
+# Min = _basics.Min
+# Max = _basics.Max
+# Product = _basics.Product
 
 # import reduction op values
-Average = _basics.Average
-Sum = _basics.Sum
-Adasum = _basics.Adasum
-Min = _basics.Min
-Max = _basics.Max
-Product = _basics.Product
+Average = None
+Sum = None
+Adasum = None
+Min = None
+Max = None
+Product = None
 
 def init(*args, **kwargs):
+    global _basics
+
+    global shutdown
+    global is_initialized
+    global start_timeline
+    global stop_timeline
+    global size
+    global local_size
+    global cross_size
+    global rank
+    global local_rank
+    global cross_rank
+    global mpi_threads_supported
+    global mpi_enabled
+    global mpi_built
+    global gloo_enabled
+    global gloo_built
+    global nccl_built
+    global ddl_built
+    global ccl_built
+    global cuda_built
+    global rocm_built
+
+    global Average
+    global Sum
+    global Adasum
+    global Min
+    global Max
+    global Product
+
+    global is_homogeneous
+    global handle_average_backwards_compatibility
+    global check_num_rank_power_of_2
+
+    _basics = _HorovodBasics(__file__, 'mpi_lib')
+
+    # import basic methods
+    shutdown = _basics.shutdown
+    is_initialized = _basics.is_initialized
+    start_timeline = _basics.start_timeline
+    stop_timeline = _basics.stop_timeline
+    size = _basics.size
+    local_size = _basics.local_size
+    cross_size = _basics.cross_size
+    rank = _basics.rank
+    local_rank = _basics.local_rank
+    cross_rank = _basics.cross_rank
+    mpi_threads_supported = _basics.mpi_threads_supported
+    mpi_enabled = _basics.mpi_enabled
+    mpi_built = _basics.mpi_built
+    gloo_enabled = _basics.gloo_enabled
+    gloo_built = _basics.gloo_built
+    nccl_built = _basics.nccl_built
+    ddl_built = _basics.ddl_built
+    ccl_built = _basics.ccl_built
+    cuda_built = _basics.cuda_built
+    rocm_built = _basics.rocm_built
+
+    # import reduction op values
+    Average = _basics.Average
+    Sum = _basics.Sum
+    Adasum = _basics.Adasum
+    Min = _basics.Min
+    Max = _basics.Max
+    Product = _basics.Product
+
+    is_homogeneous = _basics.is_homogeneous
+    handle_average_backwards_compatibility = get_average_backwards_compatibility_fun(_basics)
+    check_num_rank_power_of_2 = num_rank_is_power_2
+
     _basics.init(*args, **kwargs)
     # Call set up again to make sure the basics is in sync
     _setup_process_sets(_basics)
 
-is_homogeneous = _basics.is_homogeneous
+# is_homogeneous = _basics.is_homogeneous
+is_homogeneous = None
 
-handle_average_backwards_compatibility = get_average_backwards_compatibility_fun(_basics)
+# handle_average_backwards_compatibility = get_average_backwards_compatibility_fun(_basics)
+handle_average_backwards_compatibility = None
 
-check_num_rank_power_of_2 = num_rank_is_power_2
+check_num_rank_power_of_2 = None
+# check_num_rank_power_of_2 = num_rank_is_power_2
 
-_setup_process_sets(_basics)
+# _setup_process_sets(_basics)
 
 
 # This function will create a default device map which includes all visible devices.

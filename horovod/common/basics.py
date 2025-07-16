@@ -23,13 +23,17 @@ class MPI:
         ...
 
 from horovod.common.process_sets import ProcessSet, global_process_set, _init_process_sets
+from horovod.common.process_sets import _setup as _setup_process_sets
 from horovod.common import util as util
 
+print(f"[hvd DEBUG] custom HorovodBasics is imported")
 
 class HorovodBasics(object):
     """Wrapper class for the basic Horovod API."""
 
     def __init__(self, pkg_path, *args):
+        print(f"[hvd DEBUG] HorovodBasics.__init__ - pkg_path: {pkg_path}")
+
         full_path = util.get_extension_full_path(pkg_path, *args)
         self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
@@ -50,6 +54,8 @@ class HorovodBasics(object):
 
     def init(self, comm: Optional[Union[Sequence[int], MPI.Comm]] = None,
              process_sets: Optional[Sequence[ProcessSet]] = None):
+        print("[hvd DEBUG] HorovodBasics.init")
+
         """A function that initializes Horovod.
 
         Args:
@@ -132,6 +138,7 @@ class HorovodBasics(object):
             raise ValueError(
                 "Horovod initialization failed. Please check log messages above for a more descriptive error.")
 
+        _setup_process_sets(self)
         try:
             _init_process_sets(process_sets)
         except ValueError as e:
@@ -489,4 +496,3 @@ class HorovodBasics(object):
         elif result == self.HOROVOD_PROCESS_SET_ERROR_UNKNOWN_SET:
             raise ValueError('MPI communicator does not correspond to any registered process set.')
         return result
-
