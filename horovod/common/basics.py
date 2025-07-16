@@ -25,11 +25,30 @@ class MPI:
 from horovod.common.process_sets import ProcessSet, global_process_set, _init_process_sets
 from horovod.common import util as util
 
+print(f"[hvd DEBUG] custom HorovodBasics is imported")
 
-class HorovodBasics(object):
+
+class SingletonMeta(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        import traceback
+        print(f"[hvd DEBUG] HorovodBasics SingletonMeta.__call__ - tracekstack: \n{traceback.format_stack()}\n\n")
+
+        if cls not in cls._instances:
+            print(f"[hvd DEBUG] Init HorovodBasics with args: {args} and kwargs: {kwargs}")
+            instance = super(SingletonMeta, cls).__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        else:
+            print(f"[hvd DEBUG] Trying to reinit HorovodBasics with args: {args} and kwargs: {kwargs}")
+        return cls._instances[cls]
+
+
+class HorovodBasics(object, metaclass=SingletonMeta):
     """Wrapper class for the basic Horovod API."""
 
     def __init__(self, pkg_path, *args):
+        print(f"[hvd DEBUG] HorovodBasics.__init__ - pkg_path: {pkg_path}")
+
         full_path = util.get_extension_full_path(pkg_path, *args)
         self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
 
@@ -50,6 +69,8 @@ class HorovodBasics(object):
 
     def init(self, comm: Optional[Union[Sequence[int], MPI.Comm]] = None,
              process_sets: Optional[Sequence[ProcessSet]] = None):
+        print("[hvd DEBUG] HorovodBasics.init")
+
         """A function that initializes Horovod.
 
         Args:
@@ -133,6 +154,7 @@ class HorovodBasics(object):
                 "Horovod initialization failed. Please check log messages above for a more descriptive error.")
 
         try:
+            print(f"[hvd DEBUG] HorovodBasics.init / _init_process_sets - process_sets: {process_sets} - global_process_set: {global_process_set}")
             _init_process_sets(process_sets)
         except ValueError as e:
             if (len(e.args) > 0 and isinstance(e.args[0], str) and
@@ -489,4 +511,3 @@ class HorovodBasics(object):
         elif result == self.HOROVOD_PROCESS_SET_ERROR_UNKNOWN_SET:
             raise ValueError('MPI communicator does not correspond to any registered process set.')
         return result
-

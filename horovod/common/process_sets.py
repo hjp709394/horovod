@@ -90,6 +90,9 @@ global_process_set.process_set_id = 0
 
 
 def _setup(basics):
+    import traceback
+    print(f"[hvd DEBUG] process_sets / _setup - basics: {id(basics)} / {basics} - tracekstack: \n{traceback.format_stack()}\n\n")
+
     # type: (Optional[HorovodBasics]) -> None
     """" Horovod internal, to be called after the Horovod C++ module has been loaded. """
     global _basics
@@ -97,12 +100,15 @@ def _setup(basics):
 
 
 def _init_process_sets(process_set_list: List[ProcessSet]):
+    print(f"[hvd DEBUG] _init_process_sets - process_set_list: {process_set_list} - _basics: {id(_basics)} / {_basics}")
+
     """ Update process_set_id and ranks entries of all passed process set objects and invalidate any clones.
 
     Horovod internal, to be called from hvd.init(). """
     # Update process set objects in passed list:
     ids_seen_in_process_set_list = {0}  # global_process_set is not in list
     id_to_ranks_dict = _basics._get_process_set_ids_and_ranks()
+    print(f"[hvd DEBUG] _init_process_sets - _get_process_set_ids_and_ranks - id_to_ranks_dict: {id_to_ranks_dict}")
     ranks_to_id_dict = {tuple(ranks): process_set_id for process_set_id, ranks in id_to_ranks_dict.items()}
     for ps in process_set_list:
         if ps.ranks is not None:
@@ -115,8 +121,10 @@ def _init_process_sets(process_set_list: List[ProcessSet]):
         else:
             ids_seen_in_process_set_list.add(ps.process_set_id)
 
+    print(f"[hvd DEBUG] _init_process_sets - global_process_set: {global_process_set} - id_to_ranks_dict: {id_to_ranks_dict}")
     # Update ranks in global process set object
     if global_process_set.ranks != id_to_ranks_dict[0]:
+        print(f"[hvd DEBUG] set global_process_set.ranks to {id_to_ranks_dict[0]}")
         global_process_set.ranks = id_to_ranks_dict[0]
 
 
