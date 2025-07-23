@@ -14,7 +14,7 @@
 # limitations under the License.
 # ==============================================================================
 
-from horovod.torch.mpi_ops import allgather_async, allreduce_async, Sum, size, synchronize
+from horovod.torch.mpi_ops import allgather_async, allreduce_async, horovod_reduce_op_sum, size, synchronize
 
 from packaging import version
 
@@ -57,7 +57,7 @@ class SyncBatchNorm(_BatchNorm):
             module tracks the running mean and variance, and when set to `False`,
             this module does not track such statistics and always uses batch
             statistics in both training and eval modes. Default: `True`
-    
+
     .. note:: Only GPU input tensors are supported in the training mode.
     """
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True):
@@ -159,8 +159,8 @@ class _SyncBatchNorm(Function):
 
         if need_input_grad:
             # synchronizing stats used to calculate input gradient.
-            sum_dy_handle = allreduce_async(sum_dy, op=Sum, name='sync_batch_norm.sum_dy')
-            sum_dy_xmu_handle = allreduce_async(sum_dy_xmu, op=Sum, name='sync_batch_norm.sum_dy_xmu')
+            sum_dy_handle = allreduce_async(sum_dy, op=horovod_reduce_op_sum(), name='sync_batch_norm.sum_dy')
+            sum_dy_xmu_handle = allreduce_async(sum_dy_xmu, op=horovod_reduce_op_sum(), name='sync_batch_norm.sum_dy_xmu')
 
             # wait on the async communication to finish
             sum_dy = synchronize(sum_dy_handle)
@@ -174,7 +174,7 @@ class _SyncBatchNorm(Function):
                 # before 1.9.0 we need the count as an integer to compute means values
                 count = count_all.sum()
             else:
-                # before 1.5.0, sum_dy was sum of means from every worker, so we just 
+                # before 1.5.0, sum_dy was sum of means from every worker, so we just
                 # need to divide it by number of workers
                 count = size()
 

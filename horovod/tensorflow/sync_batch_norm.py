@@ -17,7 +17,7 @@
 import tensorflow as tf
 from horovod.tensorflow.mpi_ops import _allreduce
 from horovod.tensorflow.mpi_ops import size, rank
-from horovod.tensorflow.mpi_ops import Sum
+from horovod.tensorflow.mpi_ops import horovod_reduce_op_sum
 
 class SyncBatchNormalization(tf.keras.layers.BatchNormalization):
   """ Synchronous batch normalization. Stats are synchronized across all workers during training. """
@@ -41,7 +41,7 @@ class SyncBatchNormalization(tf.keras.layers.BatchNormalization):
 
       # Average stats across all workers
       worker_stack = tf.stack([worker_mean, worker_mean_of_square])
-      group_stack = _allreduce(worker_stack, op=Sum)
+      group_stack = _allreduce(worker_stack, op=horovod_reduce_op_sum())
       group_stack /= size()
       group_mean, group_mean_of_square = tf.unstack(group_stack)
 

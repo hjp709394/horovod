@@ -50,7 +50,7 @@ if _MPI_LIB_AVAILABLE:
     from horovod.torch.mpi_ops import gloo_enabled, gloo_built
     from horovod.torch.mpi_ops import nccl_built, ddl_built, ccl_built, cuda_built, rocm_built
     from horovod.torch.mpi_ops import ProcessSet, global_process_set, add_process_set, remove_process_set
-    from horovod.torch.mpi_ops import Average, Sum, Adasum, Min, Max, Product
+    from horovod.torch.mpi_ops import horovod_reduce_op_average, horovod_reduce_op_sum, horovod_reduce_op_adasum, horovod_reduce_op_min, horovod_reduce_op_max, horovod_reduce_op_product, horovod_reduce_op
     from horovod.torch.mpi_ops import HorovodInternalError
     from horovod.torch.optimizer import DistributedOptimizer
     from horovod.torch.sync_batch_norm import SyncBatchNorm

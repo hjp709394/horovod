@@ -23,41 +23,47 @@ class MPI:
         ...
 
 from horovod.common.process_sets import ProcessSet, global_process_set, _init_process_sets
+from horovod.common.process_sets import _setup as _setup_process_sets
 from horovod.common import util as util
 
 print(f"[hvd DEBUG] custom HorovodBasics is imported")
 
 
-class SingletonMeta(type):
-    _instances = {}
-    def __call__(cls, *args, **kwargs):
-        import traceback
-        print(f"[hvd DEBUG] HorovodBasics SingletonMeta.__call__ - tracekstack: \n{traceback.format_stack()}\n\n")
+# class SingletonMeta(type):
+#     _instances = {}
+#     def __call__(cls, *args, **kwargs):
+#         import traceback
+#         print(f"[hvd DEBUG] HorovodBasics SingletonMeta.__call__ - tracekstack: \n{traceback.format_stack()}\n\n")
 
-        if cls not in cls._instances:
-            print(f"[hvd DEBUG] Init HorovodBasics with args: {args} and kwargs: {kwargs}")
-            instance = super(SingletonMeta, cls).__call__(*args, **kwargs)
-            cls._instances[cls] = instance
-        else:
-            print(f"[hvd DEBUG] Trying to reinit HorovodBasics with args: {args} and kwargs: {kwargs}")
-        return cls._instances[cls]
+#         if cls not in cls._instances:
+#             print(f"[hvd DEBUG] Init HorovodBasics with args: {args} and kwargs: {kwargs}")
+#             instance = super(SingletonMeta, cls).__call__(*args, **kwargs)
+#             cls._instances[cls] = instance
+#         else:
+#             print(f"[hvd DEBUG] Trying to reinit HorovodBasics with args: {args} and kwargs: {kwargs}")
+#         return cls._instances[cls]
 
 
-class HorovodBasics(object, metaclass=SingletonMeta):
+# class HorovodBasics(object, metaclass=SingletonMeta):
+class HorovodBasics(object):
     """Wrapper class for the basic Horovod API."""
 
     def __init__(self, pkg_path, *args):
         print(f"[hvd DEBUG] HorovodBasics.__init__ - pkg_path: {pkg_path}")
+        import traceback
+        print(f"[hvd DEBUG] HorovodBasics __init__ - tracekstack: \n{traceback.format_stack()}\n\n")
 
-        full_path = util.get_extension_full_path(pkg_path, *args)
-        self.MPI_LIB_CTYPES = ctypes.CDLL(full_path, mode=ctypes.RTLD_GLOBAL)
+        # full_path = util.get_extension_full_path(pkg_path, *args)
+        self.full_path = util.get_extension_full_path(pkg_path, *args)
 
-        self.Average = self.MPI_LIB_CTYPES.horovod_reduce_op_average()
-        self.Sum = self.MPI_LIB_CTYPES.horovod_reduce_op_sum()
-        self.Adasum = self.MPI_LIB_CTYPES.horovod_reduce_op_adasum()
-        self.Min = self.MPI_LIB_CTYPES.horovod_reduce_op_min()
-        self.Max = self.MPI_LIB_CTYPES.horovod_reduce_op_max()
-        self.Product = self.MPI_LIB_CTYPES.horovod_reduce_op_product()
+        # self.MPI_LIB_CTYPES = ctypes.CDLL(self.full_path, mode=ctypes.RTLD_GLOBAL)
+
+        self.Average = None # self.MPI_LIB_CTYPES.horovod_reduce_op_average()
+        self.Sum = None # self.MPI_LIB_CTYPES.horovod_reduce_op_sum()
+        self.Adasum = None # self.MPI_LIB_CTYPES.horovod_reduce_op_adasum()
+        self.Min = None # self.MPI_LIB_CTYPES.horovod_reduce_op_min()
+        self.Max = None # self.MPI_LIB_CTYPES.horovod_reduce_op_max()
+        self.Product = None # self.MPI_LIB_CTYPES.horovod_reduce_op_product()
 
         # These must be kept in sync with operations.cc (this might also be possible via ctypes)
         self.HOROVOD_PROCESS_SET_ERROR_INIT = -1
@@ -69,7 +75,16 @@ class HorovodBasics(object, metaclass=SingletonMeta):
 
     def init(self, comm: Optional[Union[Sequence[int], MPI.Comm]] = None,
              process_sets: Optional[Sequence[ProcessSet]] = None):
-        print("[hvd DEBUG] HorovodBasics.init")
+        print("[hvd DEBUG] HorovodBasics.init - lazy MPI_LIB_CTYPES")
+
+        self.MPI_LIB_CTYPES = ctypes.CDLL(self.full_path, mode=ctypes.RTLD_GLOBAL)
+
+        self.Average = self.MPI_LIB_CTYPES.horovod_reduce_op_average()
+        self.Sum = self.MPI_LIB_CTYPES.horovod_reduce_op_sum()
+        self.Adasum = self.MPI_LIB_CTYPES.horovod_reduce_op_adasum()
+        self.Min = self.MPI_LIB_CTYPES.horovod_reduce_op_min()
+        self.Max = self.MPI_LIB_CTYPES.horovod_reduce_op_max()
+        self.Product = self.MPI_LIB_CTYPES.horovod_reduce_op_product()
 
         """A function that initializes Horovod.
 
@@ -153,6 +168,8 @@ class HorovodBasics(object, metaclass=SingletonMeta):
             raise ValueError(
                 "Horovod initialization failed. Please check log messages above for a more descriptive error.")
 
+        print(f"[hvd DEBUG] HorovodBasics.init - _setup_process_sets - reset to self: {self}")
+        _setup_process_sets(self)
         try:
             print(f"[hvd DEBUG] HorovodBasics.init / _init_process_sets - process_sets: {process_sets} - global_process_set: {global_process_set}")
             _init_process_sets(process_sets)
@@ -511,3 +528,38 @@ class HorovodBasics(object, metaclass=SingletonMeta):
         elif result == self.HOROVOD_PROCESS_SET_ERROR_UNKNOWN_SET:
             raise ValueError('MPI communicator does not correspond to any registered process set.')
         return result
+
+    def horovod_reduce_op_average(self):
+        return self.Average
+
+    def horovod_reduce_op_sum(self):
+        return self.Sum
+
+    def horovod_reduce_op_adasum(self):
+        return self.Adasum
+
+    def horovod_reduce_op_min(self):
+        return self.Min
+
+    def horovod_reduce_op_max(self):
+        return self.Max
+
+    def horovod_reduce_op_product(self):
+        return self.Product
+
+    def horovod_reduce_op(self, op: str):
+        op = op.lower()
+        if op == "average":
+            return self.Average
+        elif op == "sum":
+            return self.Sum
+        elif op == "adasum":
+            return self.Adasum
+        elif op == "min":
+            return self.Min
+        elif op == "max":
+            return self.Max
+        elif op == "product":
+            return self.Product
+        else:
+            raise ValueError(f"Invalid reduce operation: {op}")

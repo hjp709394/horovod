@@ -79,17 +79,36 @@ cuda_built = _basics.cuda_built
 rocm_built = _basics.rocm_built
 
 # import reduction op values
-Average = _basics.Average
-Sum = _basics.Sum
-Adasum = _basics.Adasum
-Min = _basics.Min
-Max = _basics.Max
-Product = _basics.Product
+
+# Average = None
+# Sum = None
+# Adasum = None
+# Min = None
+# Max = None
+# Product = None
+
+horovod_reduce_op_average = _basics.horovod_reduce_op_average
+horovod_reduce_op_sum = _basics.horovod_reduce_op_sum
+horovod_reduce_op_adasum = _basics.horovod_reduce_op_adasum
+horovod_reduce_op_min = _basics.horovod_reduce_op_min
+horovod_reduce_op_max = _basics.horovod_reduce_op_max
+horovod_reduce_op_product = _basics.horovod_reduce_op_product
+
+horovod_reduce_op = _basics.horovod_reduce_op
+
 
 def init(*args, **kwargs):
     _basics.init(*args, **kwargs)
     # Call set up again to make sure the basics is in sync
     _setup_process_sets(_basics)
+
+    # global Average, Sum, Adasum, Min, Max, Product
+    # Average = _basics.Average
+    # Sum = _basics.Sum
+    # Adasum = _basics.Adasum
+    # Min = _basics.Min
+    # Max = _basics.Max
+    # Product = _basics.Product
 
 is_homogeneous = _basics.is_homogeneous
 
@@ -112,7 +131,7 @@ def _normalize_name(name):
     return re.sub('[^a-zA-Z0-9_]', '_', name)
 
 
-def _allreduce(tensor, name=None, op=Sum, prescale_factor=1.0, postscale_factor=1.0,
+def _allreduce(tensor, name=None, op=_basics.horovod_reduce_op_sum(), prescale_factor=1.0, postscale_factor=1.0,
                ignore_name_scope=False, process_set=global_process_set):
     """An op which reduces an input tensor over all the Horovod processes. The
     default reduction is a sum.
@@ -156,7 +175,7 @@ def _allreduce_grad(op, grad):
                       process_set=_temp_process_set_object(process_set_id))
 
 
-def _grouped_allreduce(tensors, name=None, op=Sum, prescale_factor=1.0, postscale_factor=1.0,
+def _grouped_allreduce(tensors, name=None, op=_basics.horovod_reduce_op_sum(), prescale_factor=1.0, postscale_factor=1.0,
                        ignore_name_scope=False, process_set=global_process_set):
     """An op which reduces input tensors over all the Horovod processes. The
     default reduction is a sum.
@@ -238,7 +257,7 @@ def _allgather_grad(op, grad):
     ignore_name_scope = op.get_attr('ignore_name_scope')
     process_set_id = op.get_attr('process_set_id')
     temp_process_set_object = _temp_process_set_object(process_set_id)
-    grad = _allreduce(grad, op=Average, ignore_name_scope=ignore_name_scope,
+    grad = _allreduce(grad, op=_basics.horovod_reduce_op_average(), ignore_name_scope=ignore_name_scope,
                       process_set=temp_process_set_object)
 
     with tf.device('/cpu:0'):
@@ -294,7 +313,7 @@ def _grouped_allgather_grad(op, *grads):
     temp_process_set_object = _temp_process_set_object(process_set_id)
     # Not using _grouped_allreduce here because all its input tensors need to be of the same dtype, but TensorFlow may
     # give us float32 zero gradients here despite non-zero gradients being, e.g, float64.
-    grads = [_allreduce(g, op=Average, ignore_name_scope=ignore_name_scope, process_set=temp_process_set_object)
+    grads = [_allreduce(g, op=_basics.horovod_reduce_op_average(), ignore_name_scope=ignore_name_scope, process_set=temp_process_set_object)
              for g in grads]
 
     split_sizes = []
@@ -348,7 +367,7 @@ def _broadcast_grad(op, grad):
     root_rank = op.get_attr('root_rank')
     ignore_name_scope = op.get_attr('ignore_name_scope')
     process_set_id = op.get_attr('process_set_id')
-    grad_reduced = _allreduce(grad, op=Average,
+    grad_reduced = _allreduce(grad, op=_basics.horovod_reduce_op_average(),
                               ignore_name_scope=ignore_name_scope,
                               process_set=_temp_process_set_object(process_set_id))
     if rank() != root_rank:
@@ -454,7 +473,7 @@ def _alltoall_grad(op, grad_wrt_output, grad_wrt_received_splits):
     return [grad_wrt_tensor, grad_wrt_splits]
 
 
-def _reducescatter(tensor, name=None, op=Sum, ignore_name_scope=False,
+def _reducescatter(tensor, name=None, op=_basics.horovod_reduce_op_sum(), ignore_name_scope=False,
                    process_set=global_process_set, prescale_factor=1.0,
                    postscale_factor=1.0):
     """An op which reduces an input tensor over all the Horovod processes, then
@@ -496,7 +515,7 @@ def _reducescatter_grad(op, grad):
     prescale_factor = op.get_attr('prescale_factor')
     postscale_factor = op.get_attr('postscale_factor')
     process_set = _temp_process_set_object(process_set_id)
-    if reduce_op == Sum:
+    if reduce_op == _basics.horovod_reduce_op_sum():
         grad *= process_set.size()
     if prescale_factor != 1.0:
         grad *= prescale_factor
@@ -506,7 +525,7 @@ def _reducescatter_grad(op, grad):
                      process_set=process_set)
 
 
-def _grouped_reducescatter(tensors, name=None, op=Sum, ignore_name_scope=False,
+def _grouped_reducescatter(tensors, name=None, op=_basics.horovod_reduce_op_sum(), ignore_name_scope=False,
                            process_set=global_process_set,
                            prescale_factor=1.0, postscale_factor=1.0):
     """An op which sums an input tensor over all the Horovod processes, then
@@ -550,7 +569,7 @@ def _grouped_reducescatter_grad(op, *grads):
     prescale_factor = op.get_attr('prescale_factor')
     postscale_factor = op.get_attr('postscale_factor')
     process_set = _temp_process_set_object(process_set_id)
-    if reduce_op == Sum:
+    if reduce_op == _basics.horovod_reduce_op_sum():
         grads = [grad * process_set.size() for grad in grads]
     if prescale_factor != 1.0:
         grads = [grad * prescale_factor for grad in grads]

@@ -60,18 +60,42 @@ ccl_built = _basics.ccl_built
 cuda_built = _basics.cuda_built
 rocm_built = _basics.rocm_built
 
+# import reduction op values
+# Average = _basics.Average
+# Sum = _basics.Sum
+# Adasum = _basics.Adasum
+# Min = _basics.Min
+# Max = _basics.Max
+# Product = _basics.Product
+
+# Average = None
+# Sum = None
+# Adasum = None
+# Min = None
+# Max = None
+# Product = None
+
+horovod_reduce_op_average = _basics.horovod_reduce_op_average
+horovod_reduce_op_sum = _basics.horovod_reduce_op_sum
+horovod_reduce_op_adasum = _basics.horovod_reduce_op_adasum
+horovod_reduce_op_min = _basics.horovod_reduce_op_min
+horovod_reduce_op_max = _basics.horovod_reduce_op_max
+horovod_reduce_op_product = _basics.horovod_reduce_op_product
+
+horovod_reduce_op = _basics.horovod_reduce_op
+
 def init(*args, **kwargs):
     _basics.init(*args, **kwargs)
     # Call set up again to make sure the basics is in sync
     _setup_process_sets(_basics)
 
-# import reduction op values
-Average = _basics.Average
-Sum = _basics.Sum
-Adasum = _basics.Adasum
-Min = _basics.Min
-Max = _basics.Max
-Product = _basics.Product
+    # global Average, Sum, Adasum, Min, Max, Product
+    # Average = _basics.Average
+    # Sum = _basics.Sum
+    # Adasum = _basics.Adasum
+    # Min = _basics.Min
+    # Max = _basics.Max
+    # Product = _basics.Product
 
 handle_average_backwards_compatibility = get_average_backwards_compatibility_fun(_basics)
 
@@ -120,7 +144,7 @@ def allreduce(tensor, average=None, name=None, priority=0, prescale_factor=1.0,
         across all processes.
     """
     op = handle_average_backwards_compatibility(op, average)
-    assert op != Adasum
+    assert op != horovod_reduce_op_adasum()
 
     output = mx.nd.zeros(shape=tensor.shape, ctx=tensor.context,
                          dtype=tensor.dtype)
@@ -175,7 +199,7 @@ def allreduce_(tensor, average=None, name=None, priority=0, prescale_factor=1.0,
         across all processes.
     """
     op = handle_average_backwards_compatibility(op, average)
-    assert op != Adasum
+    assert op != horovod_reduce_op_adasum()
 
     c_in = tensor.handle
     c_out = tensor.handle
@@ -228,7 +252,7 @@ def grouped_allreduce(tensors, average=None, name=None, priority=0, prescale_fac
         averaged or summed across all processes.
     """
     op = handle_average_backwards_compatibility(op, average)
-    assert op != Adasum
+    assert op != horovod_reduce_op_adasum()
 
     if not tensors:
       return tensors
@@ -287,7 +311,7 @@ def grouped_allreduce_(tensors, average=None, name=None, priority=0, prescale_fa
         averaged or summed across all processes.
     """
     op = handle_average_backwards_compatibility(op, average)
-    assert op != Adasum
+    assert op != horovod_reduce_op_adasum()
 
     if not tensors:
       return tensors
@@ -538,7 +562,7 @@ def alltoall(tensor, splits=None, name=None, priority=0, process_set=global_proc
         return output
 
 
-def reducescatter(tensor, op=Average, name=None, priority=0,
+def reducescatter(tensor, op="Average", name=None, priority=0, # horovod_reduce_op_average()
                   process_set=global_process_set, prescale_factor=1.0, postscale_factor=1.0):
     """
     A function that performs asynchronous averaging or summation of the input tensor
@@ -571,8 +595,10 @@ def reducescatter(tensor, op=Average, name=None, priority=0,
         The shape is identical to the input shape except for the first dimension,
         which will be divided across the different Horovod processes.
     """
+    op = horovod_reduce_op(op)
+
     assert(isinstance(tensor, mx.nd.NDArray))
-    assert(op in [Average, Sum])
+    assert(op in [horovod_reduce_op_average(), horovod_reduce_op_sum()])
     if tensor.shape == ():
         raise ValueError("reducescatter does not support scalar inputs")
     # Size of output is unknown, create output array that
@@ -595,7 +621,7 @@ def reducescatter(tensor, op=Average, name=None, priority=0,
     return output
 
 
-def grouped_reducescatter(tensors, op=Average, name=None, priority=0,
+def grouped_reducescatter(tensors, op="Average", name=None, priority=0, # horovod_reduce_op_average()
                           process_set=global_process_set, prescale_factor=1.0, postscale_factor=1.0):
     """
     A function that performs reduction of a list of input tensors over all the
@@ -628,8 +654,9 @@ def grouped_reducescatter(tensors, op=Average, name=None, priority=0,
         tensor the shape is identical to the input shape, except for the first dimension,
         which will be divided across the different Horovod processes.
     """
+    op = horovod_reduce_op(op)
     assert(all(isinstance(t, mx.nd.NDArray) for t in tensors))
-    assert(op in [Average, Sum])
+    assert(op in [horovod_reduce_op_average(), horovod_reduce_op_sum()])
     if any(tensor.shape == () for tensor in tensors):
         raise ValueError("groued_reducescatter does not support scalar inputs")
     # Sizes of outputs are unknown, create output arrays that

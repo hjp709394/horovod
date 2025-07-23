@@ -38,7 +38,7 @@ from horovod.tensorflow import mpi_threads_supported, mpi_enabled, mpi_built
 from horovod.tensorflow import gloo_enabled, gloo_built
 from horovod.tensorflow.mpi_ops import ProcessSet, global_process_set, add_process_set, remove_process_set
 from horovod.tensorflow import nccl_built, ddl_built, ccl_built, cuda_built, rocm_built
-from horovod.tensorflow import Average, Sum
+from horovod.tensorflow import horovod_reduce_op_average, horovod_reduce_op_sum, horovod_reduce_op
 from horovod.tensorflow.compression import Compression
 
 
@@ -51,7 +51,7 @@ def DistributedOptimizer(optimizer, name=None,
                          compression=Compression.none,
                          sparse_as_dense=False,
                          gradient_predivide_factor=1.0,
-                         op=Average,
+                         op="Average", # horovod_reduce_op_average(),
                          backward_passes_per_step=1,
                          average_aggregated_gradients=False,
                          num_groups=0,
@@ -107,10 +107,14 @@ def DistributedOptimizer(optimizer, name=None,
         scale_local_gradients: Whether to scale the gradients of local variables. Default is set to True.
 
     """
+    op = horovod_reduce_op(op)
     if gradient_predivide_factor != 1.0 and rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')
 
-    if op != Average and op != Sum:
+    print(f"[debug] DistributedOptimizer: op: {op} {id(op)} | average: {horovod_reduce_op_average()} {id(horovod_reduce_op_average())} | sum: {horovod_reduce_op_sum()} {id(horovod_reduce_op_sum())}")
+    print(f"[debug] DistributedOptimizer: op == average op: {op == horovod_reduce_op_average()} | is type average: {type(op) is type(horovod_reduce_op_average())}")
+    print(f"[debug] DistributedOptimizer: op == sum op: {op == horovod_reduce_op_sum()} | is type sum: {type(op) is type(horovod_reduce_op_sum())}")
+    if op != horovod_reduce_op_average() and op != horovod_reduce_op_sum():
         raise ValueError('op currently only supports Average and Sum')
 
     if num_groups != 0:
@@ -217,7 +221,7 @@ def broadcast(value, root_rank, name=None):
     return _impl.broadcast(K, value, root_rank, name)
 
 
-def reducescatter(value, name=None, op=Average):
+def reducescatter(value, name=None, op="Average"): # horovod_reduce_op_average()):
     """
     Perform a reducescatter on a tensor-compatible value.
 
@@ -228,6 +232,7 @@ def reducescatter(value, name=None, op=Average):
         op: The reduction operation to combine tensors across different ranks.
             Defaults to Average.
     """
+    op = horovod_reduce_op(op)
     return _impl.reducescatter(K, value, name, op)
 
 

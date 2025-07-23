@@ -28,7 +28,7 @@ from horovod.tensorflow import is_initialized, start_timeline, stop_timeline
 from horovod.tensorflow import mpi_threads_supported, mpi_enabled, mpi_built
 from horovod.tensorflow import gloo_enabled, gloo_built
 from horovod.tensorflow import nccl_built, ddl_built, ccl_built, cuda_built, rocm_built
-from horovod.tensorflow import Average, Sum, Adasum
+from horovod.tensorflow import horovod_reduce_op_average, horovod_reduce_op_sum, horovod_reduce_op
 from horovod.tensorflow.compression import Compression
 from horovod.tensorflow.mpi_ops import global_process_set
 
@@ -42,7 +42,7 @@ def DistributedOptimizer(optimizer, name=None,
                          compression=Compression.none,
                          sparse_as_dense=False,
                          gradient_predivide_factor=1.0,
-                         op=Average,
+                         op="Average",  # horovod_reduce_op_average(),
                          num_groups=0,
                          groups=None):
     """
@@ -85,8 +85,9 @@ def DistributedOptimizer(optimizer, name=None,
     if gradient_predivide_factor != 1.0 and rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')
 
-    if op != Average and op != Sum:
-        raise ValueError('op currently only supports Average and Sum')
+    op = horovod_reduce_op(op)
+    # if op != horovod_reduce_op_average() and op != horovod_reduce_op_sum():
+    #     raise ValueError('op currently only supports Average and Sum')
 
     if num_groups != 0:
         warnings.warn('Parameter `num_groups` has been replaced by `groups` '
@@ -118,7 +119,7 @@ def PartialDistributedOptimizer(optimizer, name=None,
                                 compression=Compression.none,
                                 sparse_as_dense=False,
                                 gradient_predivide_factor=1.0,
-                                op=Average,
+                                op="Average",  # horovod_reduce_op_average(),
                                 backward_passes_per_step=1,
                                 average_aggregated_gradients=False,
                                 groups=None,
@@ -152,8 +153,9 @@ def PartialDistributedOptimizer(optimizer, name=None,
     if gradient_predivide_factor != 1.0 and rocm_built():
         raise ValueError('gradient_predivide_factor not supported yet with ROCm')
 
-    if op != Average and op != Sum:
-        raise ValueError('op currently only supports Average and Sum')
+    op = horovod_reduce_op(op)
+    # if op != horovod_reduce_op_average() and op != horovod_reduce_op_sum():
+    #     raise ValueError('op currently only supports Average and Sum')
 
     if groups is not None:
         if not (isinstance(groups, list) or groups > 0):
@@ -251,7 +253,7 @@ def broadcast(value, root_rank, name=None):
     return _impl.broadcast(K, value, root_rank, name)
 
 
-def reducescatter(value, name=None, op=Average):
+def reducescatter(value, name=None, op="Average"):  # horovod_reduce_op_average()):
     """
     Perform a reducescatter on a tensor-compatible value.
 
@@ -262,6 +264,7 @@ def reducescatter(value, name=None, op=Average):
         op: The reduction operation to combine tensors across different ranks.
             Defaults to Average.
     """
+    op = horovod_reduce_op(op)
     return _impl.reducescatter(K, value, name, op)
 
 

@@ -28,18 +28,19 @@ from horovod.torch.functions import broadcast_object
 from horovod.torch.mpi_ops import allreduce_async_, grouped_allreduce_async_, sparse_allreduce_async
 from horovod.torch.mpi_ops import synchronize
 from horovod.torch.mpi_ops import size
-from horovod.torch.mpi_ops import Average, Adasum, Sum
+from horovod.torch.mpi_ops import horovod_reduce_op_average, horovod_reduce_op_adasum, horovod_reduce_op
 from horovod.torch.mpi_ops import rocm_built
 from horovod.torch.mpi_ops import ProcessSet, global_process_set
 
 
 class _DistributedOptimizer(torch.optim.Optimizer):
     def __init__(self, params, named_parameters, compression,
-                 backward_passes_per_step=1, op=Average,
+                 backward_passes_per_step=1, op="Average", # horovod_reduce_op_average(),
                  gradient_predivide_factor=1.0,
                  groups=None,
                  sparse_as_dense=False,
                  process_set=global_process_set):
+        op = horovod_reduce_op(op)
         super(self.__class__, self).__init__(params)
         self._compression = compression
 
@@ -194,7 +195,7 @@ class _DistributedOptimizer(torch.optim.Optimizer):
 
         tensor_compressed, ctx = self._compression.compress(tensor)
 
-        if self.op == Average:
+        if self.op == horovod_reduce_op_average():
             # Split average operation across pre/postscale factors
             # C++ backend will apply additional 1 / size() factor to postscale_factor for op == Average.
             prescale_factor = 1.0 / self.gradient_predivide_factor
@@ -447,7 +448,7 @@ class _DistributedAdasumOptimizer(torch.optim.Optimizer):
 
         # allreduce as before
         tensor_compressed, ctx = self._compression.compress(p)
-        handle = allreduce_async_(tensor_compressed.data, name=name, op=Adasum)
+        handle = allreduce_async_(tensor_compressed.data, name=name, op=horovod_reduce_op_adasum())
 
         # reset stashed parameters
         for stashed, group in zip(stashed_params, self.param_groups):
@@ -516,7 +517,7 @@ class _DistributedAdasumOptimizer(torch.optim.Optimizer):
 def DistributedOptimizer(optimizer, named_parameters=None,
                          compression=Compression.none,
                          backward_passes_per_step=1,
-                         op=Average,
+                         op="Average", # horovod_reduce_op_average(),
                          gradient_predivide_factor=1.0,
                          num_groups=0, groups=None,
                          sparse_as_dense=False,
@@ -580,10 +581,11 @@ def DistributedOptimizer(optimizer, named_parameters=None,
     """
     # We dynamically create a new class that inherits from the optimizer that was passed in.
     # The goal is to override the `step()` method with an allreduce implementation.
+    op = horovod_reduce_op(op)
     if gradient_predivide_factor != 1.0:
         if rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')
-        if op != Average:
+        if op != horovod_reduce_op_average():
             raise ValueError('gradient_predivide_factor not supported with op != Average')
 
     if num_groups != 0:
@@ -595,7 +597,7 @@ def DistributedOptimizer(optimizer, named_parameters=None,
     if backward_passes_per_step <= 0:
         raise ValueError("backward_passes_per_step must be > 0")
 
-    if op != Adasum or size() == 1:
+    if op != horovod_reduce_op_adasum() or size() == 1:
         cls = type(optimizer.__class__.__name__, (optimizer.__class__,),
                    dict(_DistributedOptimizer.__dict__))
         return cls(optimizer.param_groups, named_parameters, compression, backward_passes_per_step, op,

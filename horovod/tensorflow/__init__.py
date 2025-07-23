@@ -37,7 +37,7 @@ from horovod.tensorflow.mpi_ops import mpi_threads_supported, mpi_enabled, mpi_b
 from horovod.tensorflow.mpi_ops import gloo_enabled, gloo_built
 from horovod.tensorflow.mpi_ops import nccl_built, ddl_built, ccl_built, cuda_built, rocm_built
 from horovod.tensorflow.mpi_ops import ProcessSet, global_process_set, add_process_set, remove_process_set
-from horovod.tensorflow.mpi_ops import Average, Sum, Adasum, Min, Max, Product
+from horovod.tensorflow.mpi_ops import horovod_reduce_op_average, horovod_reduce_op_sum, horovod_reduce_op_adasum, horovod_reduce_op
 from horovod.tensorflow.mpi_ops import handle_average_backwards_compatibility, check_num_rank_power_of_2
 from horovod.tensorflow.util import _executing_eagerly, _make_subgraph, _cache, vars_to_refs, refs_to_vars
 from horovod.tensorflow.mpi_ops import join
@@ -101,10 +101,10 @@ def allreduce(tensor, average=None, device_dense='', device_sparse='',
 
     if isinstance(tensor, tf.IndexedSlices):
         # TODO: Need to fix this to actuall call Adasum
-        if op == Adasum:
+        if op == horovod_reduce_op_adasum():
             raise NotImplementedError('The Adasum reduction does not currently support sparse tensors. As a '
                                       'workaround please pass sparse_as_dense=True to DistributedOptimizer')
-        if op != Sum and op != Average:
+        if op != horovod_reduce_op_sum() and op != horovod_reduce_op_average():
             raise NotImplementedError('Only Sum and Average ops are supported with tf.IndexedSlices')
 
 
@@ -118,7 +118,7 @@ def allreduce(tensor, average=None, device_dense='', device_sparse='',
 
             # To make this operation into an average, divide allgathered values by
             # the Horovod size.
-            new_values = (values / horovod_size) if op == Average else values
+            new_values = (values / horovod_size) if op == horovod_reduce_op_average() else values
             if (prescale_factor != 1.0 or postscale_factor != 1.0):
                 raise NotImplementedError("Pre/postscale_factor are not supported with tf.IndexedSlices")
         return tf.IndexedSlices(new_values, indices,
@@ -127,8 +127,8 @@ def allreduce(tensor, average=None, device_dense='', device_sparse='',
         average_in_framework = False
         if rocm_built():
             # For ROCm, perform averaging at framework level
-            average_in_framework = op == Average or op == Adasum
-            op = Sum if op == Average else op
+            average_in_framework = op == horovod_reduce_op_average() or op == horovod_reduce_op_adasum()
+            op = horovod_reduce_op_sum() if op == horovod_reduce_op_average() else op
 
         with tf.device(device_dense):
             horovod_size = tf.cast(size_op(process_set_id=process_set.process_set_id)
@@ -141,7 +141,7 @@ def allreduce(tensor, average=None, device_dense='', device_sparse='',
                                                   name=name, process_set=process_set,
                                                   ignore_name_scope=ignore_name_scope)
             summed_tensor = compression.decompress(summed_tensor_compressed, ctx)
-            if op == Adasum:
+            if op == horovod_reduce_op_adasum():
                 if process_set != global_process_set:
                     raise NotImplementedError("Adasum does not support non-global process sets yet.")
                 if 'CPU' not in tensor.device and gpu_available('tensorflow'):
@@ -175,7 +175,7 @@ def allreduce(tensor, average=None, device_dense='', device_sparse='',
         return new_tensor
 
 
-def reducescatter(tensor, device_dense='', compression=Compression.none, op=Average,
+def reducescatter(tensor, device_dense='', compression=Compression.none, op="Average", # horovod_reduce_op_average(),
                   name=None, process_set=global_process_set,
                   ignore_name_scope=False,
                   prescale_factor=1.0, postscale_factor=1.0):
@@ -207,9 +207,10 @@ def reducescatter(tensor, device_dense='', compression=Compression.none, op=Aver
         The shape is identical to the input shape, except for the first dimension,
         which will be divided across the different Horovod processes.
     """
-    if rocm_built() and op == Average:
+    op = horovod_reduce_op(op)
+    if rocm_built() and op == horovod_reduce_op_average():
         # Need to average in framework code
-        true_op = Sum
+        true_op = horovod_reduce_op_sum()
     else:
         true_op = op
 
@@ -219,7 +220,7 @@ def reducescatter(tensor, device_dense='', compression=Compression.none, op=Aver
                                                    ignore_name_scope=ignore_name_scope, prescale_factor=prescale_factor,
                                                    postscale_factor=postscale_factor)
         reduced_tensor = compression.decompress(reduced_tensor_compressed, ctx)
-        if op == Average and true_op == Sum:
+        if op == horovod_reduce_op_average() and true_op == horovod_reduce_op_sum():
             horovod_size = tf.cast(size_op(process_set_id=process_set.process_set_id)
                                    if int(os.environ.get("HOROVOD_ELASTIC", 0)) else process_set.size(),
                                    dtype=tensor.dtype)
@@ -276,8 +277,8 @@ def grouped_allreduce(tensors, average=None, device_dense='', device_sparse='',
     average_in_framework = False
     if rocm_built():
         # For ROCm, perform averaging at framework level
-        average_in_framework = op == Average or op == Adasum
-        op = Sum if op == Average else op
+        average_in_framework = op == horovod_reduce_op_average() or op == horovod_reduce_op_adasum()
+        op = horovod_reduce_op_sum() if op == horovod_reduce_op_average() else op
 
     # Split list of tensors into indexed slices and normal tensors to handle separately.
     tensor_list, tensor_list_idx = [], []
@@ -294,10 +295,10 @@ def grouped_allreduce(tensors, average=None, device_dense='', device_sparse='',
 
     if indexed_slices_list:
         # TODO: Need to fix this to actuall call Adasum
-        if op == Adasum:
+        if op == horovod_reduce_op_adasum():
             raise NotImplementedError('The Adasum reduction does not currently support sparse tensors. As a '
                                       'workaround please pass sparse_as_dense=True to DistributedOptimizer')
-        if op != Sum and op != Average:
+        if op != horovod_reduce_op_sum() and op != horovod_reduce_op_average():
             raise NotImplementedError('Only Sum and Average ops are supported with tf.IndexedSlices')
 
         with tf.device(device_sparse):
@@ -315,7 +316,7 @@ def grouped_allreduce(tensors, average=None, device_dense='', device_sparse='',
                 horovod_size = tf.cast(size_op(process_set_id=process_set.process_set_id)
                                        if int(os.environ.get("HOROVOD_ELASTIC", 0)) else process_set.size(),
                                        dtype=x.dtype)
-                new_values.append(x / horovod_size if op == Average else x)
+                new_values.append(x / horovod_size if op == horovod_reduce_op_average() else x)
             if (prescale_factor != 1.0 or postscale_factor != 1.0):
                 raise NotImplementedError("Pre/postscale_factor are not supported with tf.IndexedSlices")
         new_indexed_slices = [tf.IndexedSlices(x, i,
@@ -334,7 +335,7 @@ def grouped_allreduce(tensors, average=None, device_dense='', device_sparse='',
                                                            name=name,
                                                            ignore_name_scope=ignore_name_scope)
             summed_tensors = [compression.decompress(t, ctx) for t, ctx in zip(summed_tensors_compressed, ctxs)]
-            if op == Adasum:
+            if op == horovod_reduce_op_adasum():
                 if process_set != global_process_set:
                     raise NotImplementedError("Adasum does not support non-global process sets yet.")
                 if 'CPU' not in tensor.device and gpu_available('tensorflow'):
@@ -417,7 +418,7 @@ def _grouped_allreduce_cond(tensors, *args, process_set=global_process_set, **kw
     return tf.cond(cond, allreduce_fn, id_fn)
 
 
-def grouped_reducescatter(tensors, device_dense='', compression=Compression.none, op=Average,
+def grouped_reducescatter(tensors, device_dense='', compression=Compression.none, op="Average", # horovod_reduce_op_average(),
                           process_set=global_process_set, prescale_factor=1.0, postscale_factor=1.0):
     """Perform grouped reducescatters on a sequence of tf.Tensor.
 
@@ -445,11 +446,12 @@ def grouped_reducescatter(tensors, device_dense='', compression=Compression.none
         identical to the corresponding input shape, except for the first
         dimension, which will be divided across the different Horovod processes.
     """
+    op = horovod_reduce_op(op)
     if not tensors:
         return tensors
-    if rocm_built() and op == Average:
+    if rocm_built() and op == horovod_reduce_op_average():
         # Need to average in framework code
-        true_op = Sum
+        true_op = horovod_reduce_op_sum()
     else:
         true_op = op
     with tf.device(device_dense):
@@ -458,7 +460,7 @@ def grouped_reducescatter(tensors, device_dense='', compression=Compression.none
                                                             prescale_factor=prescale_factor,
                                                             postscale_factor=postscale_factor)
         reduced_tensors = [compression.decompress(t, ctx) for t, ctx in zip(reduced_tensors_compressed, ctxs)]
-        if op == Average and true_op == Sum:
+        if op == horovod_reduce_op_average() and true_op == horovod_reduce_op_sum():
             dtype = tensors[0].dtype  # HorovodGroupedReducescatterOp requires all input tensors to have the same dtype
             horovod_size = tf.cast(size_op(process_set_id=process_set.process_set_id)
                                    if int(os.environ.get("HOROVOD_ELASTIC", 0)) else process_set.size(),
@@ -554,7 +556,7 @@ def _make_cached_allreduce_grads_fn(name, device_dense, device_sparse,
                                     gradient_predivide_factor, groups,
                                     process_set):
     groups = refs_to_vars(groups) if isinstance(groups, tuple) else groups
-    if op == Average:
+    if op == horovod_reduce_op_average():
         # Split average operation across pre/postscale factors
         # C++ backend will apply additional 1 / size() factor to postscale_factor for op == Average.
         prescale_factor = 1.0 / gradient_predivide_factor
@@ -657,9 +659,10 @@ if _LegacyOptimizer is not None:
 
         def __init__(self, optimizer, name=None, use_locking=False, device_dense='',
                     device_sparse='', compression=Compression.none,
-                    sparse_as_dense=False, op=Average, gradient_predivide_factor=1.0,
+                    sparse_as_dense=False, op="Average", gradient_predivide_factor=1.0, # horovod_reduce_op_average(),
                     backward_passes_per_step=1, average_aggregated_gradients=False,
                     groups=None, process_set=global_process_set, scale_local_gradients=True):
+            op = horovod_reduce_op(op)
             if name is None:
                 name = "Distributed{}".format(type(optimizer).__name__)
             super(_DistributedOptimizer, self).__init__(name=name, use_locking=use_locking)
@@ -839,7 +842,7 @@ if _LegacyOptimizer is not None:
                                                  device_dense=self._device_dense,
                                                  device_sparse=self._device_sparse,
                                                  compression=self._compression,
-                                                 op=Adasum)
+                                                 op=horovod_reduce_op_adasum())
                         # start = start + delta
                         new_start = start_slot.assign_add(global_delta, use_locking=self.use_locking)
                         # var = start
@@ -896,7 +899,7 @@ if _LegacyOptimizer is not None:
 def DistributedOptimizer(optimizer, name=None, use_locking=False, device_dense='',
                          device_sparse='', compression=Compression.none,
                          sparse_as_dense=False, backward_passes_per_step=1,
-                         op=Average, gradient_predivide_factor=1.0,
+                         op="Average", gradient_predivide_factor=1.0, # horovod_reduce_op_average(),
                          average_aggregated_gradients=False,
                          num_groups=0, groups=None,
                          process_set=global_process_set, scale_local_gradients=True):
@@ -961,13 +964,14 @@ def DistributedOptimizer(optimizer, name=None, use_locking=False, device_dense='
         to this process set. Defaults to the global process set.
       scale_local_gradients: Whether to scale the gradients of local variables. Default is set to True.
     """
+    op = horovod_reduce_op(op)
     if gradient_predivide_factor != 1.0:
         if rocm_built():
             raise ValueError('gradient_predivide_factor not supported yet with ROCm')
-        if op != Average:
+        if op != horovod_reduce_op_average():
             raise ValueError('gradient_predivide_factor not supported with op != Average')
 
-    if op == Adasum and average_aggregated_gradients:
+    if op == horovod_reduce_op_adasum() and average_aggregated_gradients:
         raise ValueError('Adasum does not support average_aggregated_gradients == True')
 
     if num_groups != 0:
@@ -982,7 +986,7 @@ def DistributedOptimizer(optimizer, name=None, use_locking=False, device_dense='
                             'a list of list of tf.Variable.')
 
     if isinstance(optimizer, _LegacyOptimizer):
-        if op == Adasum:
+        if op == horovod_reduce_op_adasum():
             if process_set.process_set_id != 0:
                 raise NotImplementedError("Adasum does not support process sets yet")
             return _DistributedAdasumOptimizer(optimizer, name, use_locking, device_dense,
@@ -1005,7 +1009,7 @@ def DistributedOptimizer(optimizer, name=None, use_locking=False, device_dense='
             scale_local_gradients=scale_local_gradients
         )
     else:
-        if op == Adasum:
+        if op == horovod_reduce_op_adasum():
             raise ValueError('op == Adasum is not supported yet with Keras')
 
         import horovod.tensorflow.keras as hvd_k
@@ -1124,7 +1128,7 @@ if hasattr(tf, 'GradientTape'):
 
     def DistributedGradientTape(gradtape, device_dense='', device_sparse='',
                                 compression=Compression.none, sparse_as_dense=False,
-                                op=Average, gradient_predivide_factor=1.0,
+                                op="Average", gradient_predivide_factor=1.0, # horovod_reduce_op_average(),
                                 num_groups=0, groups=None, process_set=global_process_set, scale_local_gradients=True):
         """A tape that wraps another tf.GradientTape, using an allreduce to
         combine gradient values before applying gradients to model weights.
@@ -1170,10 +1174,11 @@ if hasattr(tf, 'GradientTape'):
             to this process set. Defaults to the global process set.
           scale_local_gradients: Whether to scale the gradients of local variables. Default is set to True.
         """
+        op = horovod_reduce_op(op)
         if gradient_predivide_factor != 1.0:
             if rocm_built():
                 raise ValueError('gradient_predivide_factor not supported yet with ROCm')
-            if op != Average:
+            if op != horovod_reduce_op_average():
                 raise ValueError('gradient_predivide_factor not supported with op != Average')
 
         if num_groups != 0:
@@ -1203,7 +1208,7 @@ if hasattr(tf, 'GradientTape'):
 
     def PartialDistributedGradientTape(gradtape, device_dense='', device_sparse='',
                                        compression=Compression.none, sparse_as_dense=False,
-                                       op=Average, gradient_predivide_factor=1.0,
+                                       op="Average", gradient_predivide_factor=1.0, # horovod_reduce_op_average(),
                                        num_groups=0, groups=None, process_set=global_process_set,
                                        local_layers=None, scale_local_gradients=True):
         """A tape that wraps another tf.GradientTape, using an allreduce to
@@ -1222,6 +1227,7 @@ if hasattr(tf, 'GradientTape'):
 
         The rest of the arguments are similar to those of DistributedGradientTape.
         """
+        op = horovod_reduce_op(op)
         if local_layers is None:
             local_layers = []
         elif isinstance(local_layers, tf.keras.layers.Layer):

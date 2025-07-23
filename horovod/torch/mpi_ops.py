@@ -66,6 +66,30 @@ def shutdown(*args, **kwargs):
     mpi_lib.horovod_torch_reset()
     return _basics.shutdown(*args, **kwargs)
 
+# import reduction op values
+# Average = _basics.Average
+# Sum = _basics.Sum
+# Adasum = _basics.Adasum
+# Min = _basics.Min
+# Max = _basics.Max
+# Product = _basics.Product
+
+# Average = None
+# Sum = None
+# Adasum = None
+# Min = None
+# Max = None
+# Product = None
+
+horovod_reduce_op_average = _basics.horovod_reduce_op_average
+horovod_reduce_op_sum = _basics.horovod_reduce_op_sum
+horovod_reduce_op_adasum = _basics.horovod_reduce_op_adasum
+horovod_reduce_op_min = _basics.horovod_reduce_op_min
+horovod_reduce_op_max = _basics.horovod_reduce_op_max
+horovod_reduce_op_product = _basics.horovod_reduce_op_product
+
+horovod_reduce_op = _basics.horovod_reduce_op
+
 def init(*args, **kwargs):
     global _handle_map
     _handle_map = {}
@@ -73,13 +97,14 @@ def init(*args, **kwargs):
     # Call set up again to make sure the basics is in sync
     _setup_process_sets(_basics)
 
-# import reduction op values
-Average = _basics.Average
-Sum = _basics.Sum
-Adasum = _basics.Adasum
-Min = _basics.Min
-Max = _basics.Max
-Product = _basics.Product
+    # global Average, Sum, Adasum, Min, Max, Product
+    # Average = _basics.Average
+    # Sum = _basics.Sum
+    # Adasum = _basics.Adasum
+    # Min = _basics.Min
+    # Max = _basics.Max
+    # Product = _basics.Product
+
 
 is_homogeneous = _basics.is_homogeneous
 
@@ -109,15 +134,15 @@ def _allreduce_function_factory(tensor):
 
 def _allreduce_async(tensor, output, name, op, prescale_factor, postscale_factor, process_set: ProcessSet):
     # Set the divisor for reduced gradients to average when necessary
-    if op == Average:
+    if op == horovod_reduce_op_average():
         if rocm_built():
             # For ROCm, perform averaging at framework level
             divisor = process_set.size()
-            op = Sum
+            op = horovod_reduce_op_sum()
         else:
             divisor = 1
 
-    elif op == Adasum:
+    elif op == horovod_reduce_op_adasum():
         if process_set != global_process_set:
             raise NotImplementedError("Adasum does not support non-global process sets yet.")
         if tensor.device.type != 'cpu' and gpu_available('torch'):
@@ -335,14 +360,14 @@ def _grouped_allreduce_function_factory(tensor):
 
 def _grouped_allreduce_async(tensors, outputs, name, op, prescale_factor, postscale_factor, process_set: ProcessSet):
     # Set the divisor for reduced gradients to average when necessary
-    if op == Average:
+    if op == horovod_reduce_op_average():
         if rocm_built():
             # For ROCm, perform averaging at framework level
             divisor = process_set.size()
-            op = Sum
+            op = horovod_reduce_op_sum()
         else:
             divisor = 1
-    elif op == Adasum:
+    elif op == horovod_reduce_op_adasum():
         if process_set != global_process_set:
             raise NotImplementedError("Adasum does not support non-global process sets yet.")
         if tensors[0].device.type != 'cpu' and gpu_available('torch'):
@@ -579,7 +604,7 @@ def sparse_allreduce_async(tensor, name, op, process_set=global_process_set):
         values = synchronize(values_handle)
         indices = synchronize(indices_handle)
 
-        values = (values / process_set.size()) if op == Average else values
+        values = (values / process_set.size()) if op == horovod_reduce_op_average() else values
 
         if indices.dim() == 0 or values.dim() == 0:
             return t.new().resize_as_(t)
@@ -1032,7 +1057,7 @@ def _reducescatter_async(tensor, output, name, op, process_set: ProcessSet,
     return handle
 
 
-def reducescatter_async(tensor, name=None, op=Average, process_set=global_process_set,
+def reducescatter_async(tensor, name=None, op="Average", process_set=global_process_set, # horovod_reduce_op_average(),
                         prescale_factor=1.0, postscale_factor=1.0):
     """
     A function that performs asynchronous reduction of the input tensor over all the
@@ -1062,6 +1087,7 @@ def reducescatter_async(tensor, name=None, op=Average, process_set=global_proces
         A handle to the reducescatter operation that can be used with `poll()` or
         `synchronize()`.
     """
+    op = horovod_reduce_op(op)
     output = tensor.new()
     return _reducescatter_async(tensor, output, name, op, process_set,
                                 prescale_factor, postscale_factor)
@@ -1081,7 +1107,7 @@ class HorovodReducescatter(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        if ctx.op == Sum:
+        if ctx.op == horovod_reduce_op_sum():
             grad_output *= ctx.process_set.size()
         if ctx.prescale_factor != 1.0:
             grad_output *= ctx.prescale_factor
@@ -1091,7 +1117,7 @@ class HorovodReducescatter(torch.autograd.Function):
         return allgather(grad_output, process_set=ctx.process_set), None, None, None, None, None
 
 
-def reducescatter(tensor, name=None, compression=Compression.none, op=Average,
+def reducescatter(tensor, name=None, compression=Compression.none, op="Average", # horovod_reduce_op_average(),
                   process_set=global_process_set, prescale_factor=1.0, postscale_factor=1.0):
     """
     A function that performs reduction of the input tensor over all the Horovod
@@ -1121,6 +1147,7 @@ def reducescatter(tensor, name=None, compression=Compression.none, op=Average,
         is identical to the input shape, except for the first dimension, which will be
         divided across the different Horovod processes.
     """
+    op = horovod_reduce_op(op)
     tensor_compressed, ctx = compression.compress(tensor)
     reduced_tensor_compressed = HorovodReducescatter.apply(tensor_compressed, name, op, process_set,
                                                            prescale_factor, postscale_factor)
@@ -1145,7 +1172,7 @@ def _grouped_reducescatter_async(tensors, outputs, name, op, process_set: Proces
     return handle
 
 
-def grouped_reducescatter_async(tensors, name=None, op=Average, process_set=global_process_set,
+def grouped_reducescatter_async(tensors, name=None, op="Average", process_set=global_process_set, # horovod_reduce_op_average(),
                                 prescale_factor=1.0, postscale_factor=1.0):
     """
     A function that performs asynchronous reduction of a list of input tensors over all the
@@ -1175,6 +1202,7 @@ def grouped_reducescatter_async(tensors, name=None, op=Average, process_set=glob
         A handle to the group reducescatter operation that can be used with `poll()` or
         `synchronize()`.
     """
+    op = horovod_reduce_op(op)
     outputs = [t.new() for t in tensors]
     return _grouped_reducescatter_async(tensors, outputs, name, op, process_set,
                                         prescale_factor, postscale_factor)
@@ -1195,7 +1223,7 @@ class HorovodGroupedReducescatter(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, *grad_output):
-        if ctx.op == Sum:
+        if ctx.op == horovod_reduce_op_sum():
             grad_output = [g * ctx.process_set.size() for g in grad_output]
         if ctx.prescale_factor != 1.0:
             grad_output = [ctx.prescale_factor * g for g in grad_output]
@@ -1206,7 +1234,7 @@ class HorovodGroupedReducescatter(torch.autograd.Function):
                 *grouped_allgather(grad_output, process_set=ctx.process_set))
 
 
-def grouped_reducescatter(tensors, name=None, compression=Compression.none, op=Average,
+def grouped_reducescatter(tensors, name=None, compression=Compression.none, op="Average", # horovod_reduce_op_average(),
                           process_set=global_process_set, prescale_factor=1.0, postscale_factor=1.0):
     """
     A function that performs reduction of a list of input tensors over all the
@@ -1237,6 +1265,7 @@ def grouped_reducescatter(tensors, name=None, compression=Compression.none, op=A
         tensor the shape is identical to the input shape, except for the first dimension,
         which will be divided across the different Horovod processes.
     """
+    op = horovod_reduce_op(op)
     tensors_compressed = []
     ctxs = []
     for tensor in tensors:
