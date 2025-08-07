@@ -100,10 +100,20 @@ def _init_process_sets(process_set_list: List[ProcessSet]):
     """ Update process_set_id and ranks entries of all passed process set objects and invalidate any clones.
 
     Horovod internal, to be called from hvd.init(). """
+    print(f"[debug] _init_process_sets, process_set_list: {process_set_list}")
     # Update process set objects in passed list:
     ids_seen_in_process_set_list = {0}  # global_process_set is not in list
-    id_to_ranks_dict = _basics._get_process_set_ids_and_ranks()
+    print(f"[debug] _init_process_sets, ids_seen_in_process_set_list: {ids_seen_in_process_set_list}")
+    try:
+        id_to_ranks_dict = _basics._get_process_set_ids_and_ranks()
+    except Exception as e:
+        print(f"[debug] _init_process_sets / get_process_set_ids_and_ranks - error: {e}")
+    print(f"[debug] _init_process_sets, id_to_ranks_dict: {id_to_ranks_dict}")
     ranks_to_id_dict = {tuple(ranks): process_set_id for process_set_id, ranks in id_to_ranks_dict.items()}
+
+    print(f"[debug] _init_process_sets, _basics: {_basics} - {id(_basics)}")
+    print(f"[debug] _init_process_sets, ranks_to_id_dict: {ranks_to_id_dict} - process_set_list: {process_set_list}")
+
     for ps in process_set_list:
         if ps.ranks is not None:
             ps.process_set_id = ranks_to_id_dict[tuple(ps.ranks)]
@@ -118,6 +128,8 @@ def _init_process_sets(process_set_list: List[ProcessSet]):
     # Update ranks in global process set object
     if global_process_set.ranks != id_to_ranks_dict[0]:
         global_process_set.ranks = id_to_ranks_dict[0]
+
+    print(f"[debug] _init_process_sets, global_process_set: {global_process_set}")
 
 
 def add_process_set(process_set: Union[ProcessSet, Sequence[int]]) -> ProcessSet:

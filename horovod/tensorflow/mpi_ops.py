@@ -87,6 +87,8 @@ Max = _basics.Max
 Product = _basics.Product
 
 def init(*args, **kwargs):
+    print(f"[debug] tensorflow / mpi_ops, init, _basics: {_basics} - {id(_basics)}")
+
     _basics.init(*args, **kwargs)
     # Call set up again to make sure the basics is in sync
     _setup_process_sets(_basics)
