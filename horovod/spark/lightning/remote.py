@@ -107,26 +107,29 @@ def RemoteTrainer(estimator, metadata, ckpt_bytes, run_id, dataset_idx, train_ro
     profiler = estimator.getProfiler()
 
     def train(serialized_model):
-        # If not empty, set it before everything else.
-        if mp_start_method:
-            _set_mp_start_method(mp_start_method, verbose)
-
-        import horovod.torch as hvd
-
-        if random_seed is not None:
-            pl.utilities.seed.seed_everything(seed=random_seed)
-
-        # Horovod: initialize library.
-        hvd.init()
-
-        if verbose:
-            import horovod as _horovod
-            print(f"Shared lib path is pointing to: {_horovod.common.process_sets._basics.MPI_LIB_CTYPES}")
-
-        _checkpoint_callback = None
-        require_checkpoint = False
-
         with remote_store.get_local_output_dir() as run_output_dir:
+            print(f"[DEBUG] generate timeline")
+            os.environ['HOROVOD_TIMELINE'] = os.path.join(run_output_dir, f'timeline.json')
+
+            # If not empty, set it before everything else.
+            if mp_start_method:
+                _set_mp_start_method(mp_start_method, verbose)
+
+            import horovod.torch as hvd
+
+            if random_seed is not None:
+                pl.utilities.seed.seed_everything(seed=random_seed)
+
+            # Horovod: initialize library.
+            hvd.init()
+
+            if verbose:
+                import horovod as _horovod
+                print(f"Shared lib path is pointing to: {_horovod.common.process_sets._basics.MPI_LIB_CTYPES}")
+
+            _checkpoint_callback = None
+            require_checkpoint = False
+
             logs_path = os.path.join(run_output_dir, remote_store.logs_subdir)
             os.makedirs(logs_path, exist_ok=True)
             print(f"Made directory {logs_path} for horovod rank {hvd.rank()}")

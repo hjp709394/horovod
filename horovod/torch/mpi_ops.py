@@ -67,6 +67,7 @@ def shutdown(*args, **kwargs):
     return _basics.shutdown(*args, **kwargs)
 
 def init(*args, **kwargs):
+    print(f"[debug] torch / mpi_ops, init, _basics: {_basics} - {id(_basics)}")
     global _handle_map
     _handle_map = {}
     _basics.init(*args, **kwargs)
